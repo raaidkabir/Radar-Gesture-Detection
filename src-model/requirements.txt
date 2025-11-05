@@ -1,0 +1,27 @@
+# RCS Finger Classification - Python Dependencies
+
+# Core scientific computing
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Deep learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Data processing and visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+scikit-learn>=1.0.0
+
+# Configuration and utilities
+pyyaml>=6.0
+tqdm>=4.62.0
+
+# Optional: For better performance
+# cuda-python>=11.7.0  # If using CUDA
+# tensorboard>=2.11.0  # For training visualization
+
+# Development tools (optional)
+# jupyter>=1.0.0
+# ipython>=8.0.0
+# pytest>=7.0.0

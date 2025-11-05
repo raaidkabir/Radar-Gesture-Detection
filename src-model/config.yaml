@@ -1,0 +1,57 @@
+# Configuration for BGT60TR13C Finger Classification Model
+
+# Data parameters (BGT60TR13C-specific)
+data:
+  num_classes: 5
+  input_shape: [128, 256]  # [num_chirps, num_samples] - BGT60 Range-Doppler format
+  labels: ['thumb', 'index', 'middle', 'ring', 'pinky']
+  range_resolution_cm: 2.73  # BGT60TR13C with 5.5 GHz bandwidth
+  max_range_m: 5.0
+
+# Model architecture
+model:
+  name: 'RangeDopplerCNN'
+  channels: 1  # Single-channel Range-Doppler magnitude
+  feature_maps: [32, 64, 128, 256]  # CNN feature progression
+  dropout: 0.3
+  use_attention: true  # Attention mechanism for Range-Doppler features
+
+# Training parameters
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: 'adam'
+  scheduler: 'cosine'  # Cosine annealing
+  early_stopping_patience: 15
+  
+# Data augmentation (for Range-Doppler maps)
+augmentation:
+  noise_std: 0.05  # Add Gaussian noise
+  shift_range: 5  # Random range/Doppler shifts (bins)
+  intensity_scale: [0.9, 1.1]  # Random scaling
+  enabled: true
+
+# Validation
+validation:
+  split: 0.2
+  metric: 'accuracy'
+  
+# Hardware
+device: 'cuda'  # or 'cpu' or 'mps' (for Mac M1/M2)
+num_workers: 4
+pin_memory: true
+
+# Logging
+logging:
+  log_interval: 10  # batches
+  save_interval: 5  # epochs
+  tensorboard: true
+  
+# Paths
+paths:
+  data_dir: 'data'
+  model_dir: 'models'
+  log_dir: 'logs'
+  results_dir: 'results'
