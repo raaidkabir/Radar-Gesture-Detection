@@ -13,35 +13,36 @@ model:
   name: 'RangeDopplerCNN'
   channels: 1  # Single-channel Range-Doppler magnitude
   feature_maps: [32, 64, 128, 256]  # CNN feature progression
-  dropout: 0.3
+  dropout: 0.5  # Increased to prevent overfitting
   use_attention: true  # Attention mechanism for Range-Doppler features
 
 # Training parameters
 training:
-  batch_size: 32
+  batch_size: 64  # Increased for CPU with 62GB RAM
   epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.003  # Increased for better convergence
   weight_decay: 0.0001
   optimizer: 'adam'
   scheduler: 'cosine'  # Cosine annealing
   early_stopping_patience: 15
+  label_smoothing: 0.1
   
 # Data augmentation (for Range-Doppler maps)
 augmentation:
-  noise_std: 0.05  # Add Gaussian noise
-  shift_range: 5  # Random range/Doppler shifts (bins)
-  intensity_scale: [0.9, 1.1]  # Random scaling
-  enabled: true
+  enabled: true            # Re-enable with conservative settings
+  noise_std: 0.01          # Very light Gaussian noise
+  shift_range: 1           # Allow ±1 bin shift in range/doppler
+  intensity_scale: [0.98, 1.02]  # Mild intensity scaling only
 
 # Validation
 validation:
   split: 0.2
   metric: 'accuracy'
   
-# Hardware
-device: 'cuda'  # or 'cpu' or 'mps' (for Mac M1/M2)
-num_workers: 4
-pin_memory: true
+# Hardware - Optimized for Intel i9-14900 (32 cores, 62GB RAM)
+device: 'cpu'  # No GPU available
+num_workers: 16  # Utilizing multi-core CPU efficiently
+pin_memory: false  # Disabled for CPU-only training
 
 # Logging
 logging:

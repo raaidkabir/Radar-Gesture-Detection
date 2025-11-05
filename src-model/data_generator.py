@@ -86,6 +86,88 @@ class BGT60DataGenerator:
             num_samples=self.num_samples
         )
         
+        # HYBRID APPROACH: Combine physics-based variation with learnable finger characteristics
+        # Each finger has characteristic patterns, but they vary spatially to prevent memorization
+        
+        from rcs_simulator import FINGER_GEOMETRIES
+        finger_geom = FINGER_GEOMETRIES[finger_type]
+        
+        # Finger-specific RCS and reflection characteristics
+        finger_characteristics = {
+            'thumb': {
+                'base_rcs': 1.6,  # Larger RCS (thicker)
+                'length_factor': 0.65,  # Shorter, affects range spread
+                'reflection_pattern': 'broad',  # Wide reflection due to larger surface
+                'num_scatterers': 4  # More scattering points
+            },
+            'index': {
+                'base_rcs': 1.15,
+                'length_factor': 0.95,  # Longer
+                'reflection_pattern': 'focused',
+                'num_scatterers': 3
+            },
+            'middle': {
+                'base_rcs': 1.2,
+                'length_factor': 1.0,  # Longest
+                'reflection_pattern': 'elongated',
+                'num_scatterers': 3
+            },
+            'ring': {
+                'base_rcs': 1.1,
+                'length_factor': 0.9,
+                'reflection_pattern': 'focused',
+                'num_scatterers': 2
+            },
+            'pinky': {
+                'base_rcs': 0.85,  # Smallest RCS
+                'length_factor': 0.75,  # Shorter and thinner
+                'reflection_pattern': 'narrow',
+                'num_scatterers': 2
+            }
+        }
+        
+        char = finger_characteristics[finger_type]
+        target_range = metadata['target_range_bin']
+        target_doppler = metadata['target_doppler_bin']
+        
+        # Main peak with finger-specific intensity and spread
+        if char['reflection_pattern'] == 'broad':
+            range_spread, doppler_spread = 5, 7
+        elif char['reflection_pattern'] == 'focused':
+            range_spread, doppler_spread = 3, 4
+        elif char['reflection_pattern'] == 'elongated':
+            range_spread, doppler_spread = 6, 3
+        else:  # narrow
+            range_spread, doppler_spread = 2, 3
+        
+        # Primary reflection
+        for i in range(-doppler_spread, doppler_spread + 1):
+            for j in range(-range_spread, range_spread + 1):
+                d_idx = target_doppler + i
+                r_idx = target_range + j
+                if 0 <= d_idx < self.num_chirps and 0 <= r_idx < self.num_samples:
+                    spread = np.exp(-(i**2/(2*doppler_spread**2) + j**2/(2*range_spread**2)))
+                    rd_map[d_idx, r_idx] += char['base_rcs'] * spread * 2.0
+        
+        # Multiple scattering points (finger joints, tips)
+        for scatterer_idx in range(char['num_scatterers']):
+            # Offsets based on finger length
+            range_offset = int(scatterer_idx * char['length_factor'] * 3) + self.rng.randint(-2, 3)
+            doppler_offset = self.rng.randint(-2, 3)
+            
+            sec_range = target_range + range_offset
+            sec_doppler = target_doppler + doppler_offset
+            
+            if 0 <= sec_doppler < self.num_chirps and 0 <= sec_range < self.num_samples:
+                intensity = char['base_rcs'] * (1.0 - 0.2 * scatterer_idx)  # Decreasing intensity
+                for i in range(-2, 3):
+                    for j in range(-2, 3):
+                        d_idx = sec_doppler + i
+                        r_idx = sec_range + j
+                        if 0 <= d_idx < self.num_chirps and 0 <= r_idx < self.num_samples:
+                            spread = np.exp(-(i**2 + j**2) / 3)
+                            rd_map[d_idx, r_idx] += intensity * spread * 0.5
+        
         # Add realistic clutter (static objects, multipath)
         if add_clutter:
             # Static clutter (walls, desk, etc.)

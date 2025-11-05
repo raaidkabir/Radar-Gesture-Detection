@@ -1,5 +1,6 @@
 """
 Training script for BGT60TR13C finger classification model
+Optimized for CPU-based training on multi-core systems
 """
 
 import torch
@@ -13,6 +14,7 @@ from pathlib import Path
 import time
 from tqdm import tqdm
 import os
+import multiprocessing
 
 from model import create_model, count_parameters
 
@@ -33,10 +35,17 @@ class RangeDopplerDataset(Dataset):
         self.augment = augment
         self.aug_config = aug_config or {}
         
+        # Compute global statistics for normalization
+        self.data_mean = np.mean(self.X)
+        self.data_std = np.std(self.X)
+        if self.data_std < 1e-8:
+            self.data_std = 1.0
+        
         print(f"Loaded dataset: {len(self.X)} samples")
         print(f"  Data shape: {self.X.shape}")
         print(f"  Label shape: {self.y.shape}")
         print(f"  Unique labels: {np.unique(self.y)}")
+        print(f"  Data statistics: mean={self.data_mean:.4f}, std={self.data_std:.4f}, min={self.X.min():.4f}, max={self.X.max():.4f}")
         
     def __len__(self):
         return len(self.X)
@@ -45,9 +54,12 @@ class RangeDopplerDataset(Dataset):
         x = self.X[idx].astype(np.float32)
         y = self.y[idx]
         
-        # Apply augmentation if enabled
+        # Apply augmentation on raw magnitude space (pre-normalization)
         if self.augment and self.aug_config.get('enabled', False):
             x = self._augment(x)
+        
+        # Normalize AFTER augmentation using training statistics
+        x = (x - self.data_mean) / self.data_std
         
         # Add channel dimension: (128, 256) -> (1, 128, 256)
         x = np.expand_dims(x, axis=0)
@@ -75,8 +87,8 @@ class RangeDopplerDataset(Dataset):
             shift_range = np.random.randint(-shift_max, shift_max + 1)
             x = np.roll(x, shift=(shift_doppler, shift_range), axis=(0, 1))
         
-        # Clip to valid range
-        x = np.clip(x, 0, 1)
+        # Ensure non-negative magnitude space before normalization
+        x = np.clip(x, 0, None)
         
         return x
 
@@ -92,7 +104,12 @@ class Trainer:
         self.device = device
         
         # Loss and optimizer
-        self.criterion = nn.CrossEntropyLoss()
+        label_smoothing = self.config['training'].get('label_smoothing', 0.1)
+        try:
+            self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        except TypeError:
+            # Fallback for very old torch versions without label_smoothing
+            self.criterion = nn.CrossEntropyLoss()
         
         # Optimizer
         optimizer_name = config['training']['optimizer'].lower()
@@ -302,6 +319,8 @@ def main():
                        help='Batch size (overrides config)')
     parser.add_argument('--device', type=str, default=None,
                        help='Device: cuda, cpu, or mps')
+    parser.add_argument('--num-threads', type=int, default=None,
+                       help='Number of CPU threads for PyTorch (default: auto)')
     
     args = parser.parse_args()
     
@@ -327,6 +346,27 @@ def main():
         else:
             device = torch.device('cpu')
     
+    # CPU optimizations
+    if device.type == 'cpu':
+        # Set number of threads for PyTorch
+        if args.num_threads is not None:
+            num_threads = args.num_threads
+        else:
+            # Use 80% of available cores for computation, leave some for data loading
+            num_threads = max(1, int(multiprocessing.cpu_count() * 0.8))
+        
+        torch.set_num_threads(num_threads)
+        torch.set_num_interop_threads(num_threads)
+        
+        # Enable CPU optimizations
+        if hasattr(torch, 'backends') and hasattr(torch.backends, 'mkldnn'):
+            torch.backends.mkldnn.enabled = True
+        
+        print(f"CPU Optimizations:")
+        print(f"  - PyTorch threads: {num_threads}")
+        print(f"  - Data loading workers: {config.get('num_workers', 4)}")
+        print(f"  - MKL-DNN: {'enabled' if hasattr(torch.backends, 'mkldnn') else 'not available'}")
+    
     print("BGT60TR13C Finger Classification Training")
     print("=" * 60)
     print(f"Configuration: {args.config}")
@@ -339,10 +379,16 @@ def main():
         aug_config=config.get('augmentation', {})
     )
     
+    # CRITICAL FIX: Val dataset must use training statistics for normalization!
     val_dataset = RangeDopplerDataset(
         args.val_data,
         augment=False
     )
+    # Override val dataset's normalization with training statistics
+    val_dataset.data_mean = train_dataset.data_mean
+    val_dataset.data_std = train_dataset.data_std
+    print(f"Using training normalization stats: mean={train_dataset.data_mean:.4f}, std={train_dataset.data_std:.4f}")
+
     
     # Create data loaders
     train_loader = DataLoader(

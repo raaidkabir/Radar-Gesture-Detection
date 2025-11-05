@@ -1,6 +1,42 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Editors/IDE
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project: Radar-Gesture-Detection (src-model)
+src-model/__pycache__/
+src-model/logs/**
+src-model/models/checkpoint_*.pth
+src-model/models/*.pth
+src-model/models/*.npz
+src-model/nohup.out
+
+# Generated datasets (large)
+src-model/data/*.npz
+# Python
+__pycache__/
+*.py[cod]
 *$py.class
 *.so
 .Python
@@ -27,8 +63,7 @@ src-model/models/*.pt
 src-model/models/training_history.npz
 
 # Results and visualizations
-src-model/results/*.png
-src-model/results/*.txt
+# (tracked intentionally)
 
 # Jupyter
 .ipynb_checkpoints/
