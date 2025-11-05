@@ -40,6 +40,29 @@ Or just run everything at once:
 ./quickstart.sh
 ```
 
+If you want a sanity-check dataset with extremely distinct patterns (for pipeline validation), use the simple generator under dev/:
+
+```bash
+# Sanity dataset (fast, separable patterns)
+python3 dev/simple_data_generator.py --samples 200 --output data
+```
+Use the realistic `data_generator.py` for any actual training runs you care about; the simple generator is only for debugging the training pipeline.
+
+### Make targets
+
+From `src-model/`, you can also use the Makefile shortcuts:
+
+```bash
+# Realistic dataset (override SAMPLES/OUTPUT/etc as needed)
+make data SAMPLES=1000 OUTPUT=data
+
+# Simple sanity dataset
+make data-simple SAMPLES=200 OUTPUT=data
+
+# Cleanup artifacts (keeps best/final models by default)
+make clean
+```
+
 ## How It Works
 
 ## How It Works
@@ -129,3 +152,22 @@ Check `IMPLEMENTATION_SUMMARY.md` for technical deep-dive.
 ---
 
 **Made for EE592A Project** 🎯
+
+## Cleanup
+
+Generated artifacts can pile up during experiments. Use the cleanup helper to tidy the workspace:
+
+```bash
+# From src-model/
+chmod +x clean.sh
+./clean.sh            # remove logs/, results/, __pycache__/, checkpoint_*.pth
+
+./clean.sh --dry-run  # show what would be deleted
+./clean.sh --data     # also remove data/*.npz (datasets)
+./clean.sh --all-models   # remove ALL models/*.pth and models/*.npz
+
+# Keep logs or results:
+./clean.sh --no-logs --no-results
+```
+
+Git hygiene: a top-level `.gitignore` excludes caches, virtualenvs, logs, results, model weights, and datasets from version control by default.
