@@ -86,7 +86,6 @@ class BGT60DataGenerator:
             num_samples=self.num_samples
         )
         
-        # HYBRID APPROACH: Combine physics-based variation with learnable finger characteristics
         # Each finger has characteristic patterns, but they vary spatially to prevent memorization
         
         from rcs_simulator import FINGER_GEOMETRIES

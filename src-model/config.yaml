@@ -19,13 +19,18 @@ model:
 # Training parameters
 training:
   batch_size: 64  # Increased for CPU with 62GB RAM
-  epochs: 100
-  learning_rate: 0.003  # Increased for better convergence
+  epochs: 35
+  learning_rate: 0.003  # Base LR (will warm up)
   weight_decay: 0.0001
   optimizer: 'adam'
   scheduler: 'cosine'  # Cosine annealing
   early_stopping_patience: 15
-  label_smoothing: 0.1
+  label_smoothing: 0.0
+  loss: 'focal'
+  focal_gamma: 2.5
+  warmup_epochs: 3
+  # Emphasize confused classes (index=1 slightly more, ring=3 further)
+  class_weights: [1.0, 1.2, 1.0, 1.6, 1.0]
   
 # Data augmentation (for Range-Doppler maps)
 augmentation:
@@ -33,6 +38,7 @@ augmentation:
   noise_std: 0.01          # Very light Gaussian noise
   shift_range: 1           # Allow ±1 bin shift in range/doppler
   intensity_scale: [0.98, 1.02]  # Mild intensity scaling only
+  gaussian_blur_sigma: 0.3  # Very light blur to encourage robustness
 
 # Validation
 validation:

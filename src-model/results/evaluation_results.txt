@@ -3,26 +3,26 @@ BGT60TR13C Finger Classification Evaluation Results
 
 Model: models/best_model.pth
 Test data: data/val_data.npz
-Test samples: 1000
-Test Accuracy: 80.70%
+Test samples: 600
+Test Accuracy: 89.83%
 
 Classification Report:
               precision    recall  f1-score   support
 
-       thumb       0.94      1.00      0.97       182
-       index       0.59      0.76      0.66       205
-      middle       0.83      0.98      0.90       193
-        ring       0.74      0.41      0.53       215
-       pinky       0.98      0.94      0.96       205
+       thumb       1.00      1.00      1.00       131
+       index       0.92      0.54      0.68       120
+      middle       1.00      1.00      1.00       124
+        ring       0.67      0.95      0.78       117
+       pinky       1.00      1.00      1.00       108
 
-    accuracy                           0.81      1000
-   macro avg       0.82      0.82      0.80      1000
-weighted avg       0.81      0.81      0.80      1000
+    accuracy                           0.90       600
+   macro avg       0.92      0.90      0.89       600
+weighted avg       0.92      0.90      0.89       600
 
 
 Confusion Matrix:
-[[182   0   0   0   0]
- [  1 155  25  24   0]
- [  4   0 189   0   0]
- [  6 105  13  88   3]
- [  0   4   1   7 193]]
+[[131   0   0   0   0]
+ [  0  65   0  55   0]
+ [  0   0 124   0   0]
+ [  0   6   0 111   0]
+ [  0   0   0   0 108]]

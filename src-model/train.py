@@ -5,9 +5,11 @@ Optimized for CPU-based training on multi-core systems
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
+from collections import defaultdict
 import yaml
 import argparse
 from pathlib import Path
@@ -17,6 +19,46 @@ import os
 import multiprocessing
 
 from model import create_model, count_parameters
+
+
+class FocalLoss(nn.Module):
+    """Focal Loss for multi-class classification.
+    Args:
+        gamma (float): Focusing parameter.
+        alpha (Tensor|None): Per-class weight tensor (like class balancing). If None, uniform.
+        reduction (str): 'mean' or 'sum' or 'none'
+    """
+    def __init__(self, gamma=2.0, alpha=None, reduction='mean'):
+        super().__init__()
+        self.gamma = gamma
+        self.alpha = alpha  # Tensor on device or None
+        self.reduction = reduction
+
+        
+    def forward(self, logits, targets):
+        # logits: (B, C), targets: (B,)
+        log_probs = F.log_softmax(logits, dim=1)
+        probs = torch.exp(log_probs)
+        # Gather log_probs for true class
+        targets = targets.view(-1, 1)
+        log_pt = log_probs.gather(1, targets).squeeze(1)  # (B,)
+        pt = probs.gather(1, targets).squeeze(1)
+
+        # Alpha weighting
+        if self.alpha is not None:
+            at = self.alpha.gather(0, targets.squeeze(1))
+        else:
+            at = 1.0
+
+        focal_term = (1 - pt).pow(self.gamma)
+        loss = -at * focal_term * log_pt
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
 
 
 class RangeDopplerDataset(Dataset):
@@ -69,6 +111,16 @@ class RangeDopplerDataset(Dataset):
     def _augment(self, x):
         """Apply data augmentation to Range-Doppler map"""
         
+        # Optional slight Gaussian blur to simulate minor defocus/motion
+        sigma = self.aug_config.get('gaussian_blur_sigma', None)
+        if sigma is not None and sigma > 0:
+            try:
+                from scipy.ndimage import gaussian_filter
+                x = gaussian_filter(x, sigma=sigma)
+            except Exception:
+                # If scipy isn't available at runtime, safely skip blur
+                pass
+
         # Add Gaussian noise
         if 'noise_std' in self.aug_config:
             noise = np.random.randn(*x.shape) * self.aug_config['noise_std']
@@ -104,12 +156,24 @@ class Trainer:
         self.device = device
         
         # Loss and optimizer
-        label_smoothing = self.config['training'].get('label_smoothing', 0.1)
-        try:
-            self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-        except TypeError:
-            # Fallback for very old torch versions without label_smoothing
-            self.criterion = nn.CrossEntropyLoss()
+        # Optional class weights to emphasize hard classes
+        class_weights = self.config['training'].get('class_weights', None)
+        if class_weights is not None:
+            class_weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
+
+        loss_name = self.config['training'].get('loss', 'cross_entropy').lower()
+        if loss_name == 'focal':
+            gamma = float(self.config['training'].get('focal_gamma', 2.0))
+            alpha = class_weights  # alpha can be per-class weights
+            self.criterion = FocalLoss(gamma=gamma, alpha=alpha, reduction='mean')
+        else:
+            # Cross-entropy with optional label smoothing
+            label_smoothing = float(self.config['training'].get('label_smoothing', 0.0))
+            try:
+                self.criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=label_smoothing)
+            except TypeError:
+                # Fallback for torch versions without label_smoothing
+                self.criterion = nn.CrossEntropyLoss(weight=class_weights)
         
         # Optimizer
         optimizer_name = config['training']['optimizer'].lower()
@@ -130,11 +194,17 @@ class Trainer:
             raise ValueError(f"Unknown optimizer: {optimizer_name}")
         
         # Learning rate scheduler
+        # Warmup configuration
+        self.base_lr = float(config['training']['learning_rate'])
+        self.warmup_epochs = int(config['training'].get('warmup_epochs', 0))
+
         scheduler_name = config['training'].get('scheduler', 'none').lower()
         if scheduler_name == 'cosine':
+            # Start cosine after warmup
+            t_max = max(1, int(config['training']['epochs']) - self.warmup_epochs)
             self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
-                T_max=config['training']['epochs']
+                T_max=t_max
             )
         elif scheduler_name == 'step':
             self.scheduler = optim.lr_scheduler.StepLR(
@@ -203,6 +273,10 @@ class Trainer:
         running_loss = 0.0
         correct = 0
         total = 0
+        # Per-class stats
+        num_classes = int(self.config['data']['num_classes'])
+        class_correct = [0 for _ in range(num_classes)]
+        class_total = [0 for _ in range(num_classes)]
         
         with torch.no_grad():
             for inputs, targets in self.val_loader:
@@ -215,11 +289,16 @@ class Trainer:
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
                 correct += predicted.eq(targets).sum().item()
+                # Per-class accumulation
+                for t, p in zip(targets, predicted):
+                    class_total[int(t.item())] += 1
+                    if int(p.item()) == int(t.item()):
+                        class_correct[int(t.item())] += 1
         
         val_loss = running_loss / len(self.val_loader)
         val_acc = 100. * correct / total
         
-        return val_loss, val_acc
+        return val_loss, val_acc, class_correct, class_total
     
     def train(self, num_epochs):
         """Full training loop"""
@@ -233,18 +312,27 @@ class Trainer:
         for epoch in range(1, num_epochs + 1):
             start_time = time.time()
             
+            # Warmup learning rate (epoch-based)
+            if self.warmup_epochs > 0 and epoch <= self.warmup_epochs:
+                warmup_lr = self.base_lr * (epoch / float(self.warmup_epochs))
+                for pg in self.optimizer.param_groups:
+                    pg['lr'] = warmup_lr
+
             # Train
             train_loss, train_acc = self.train_epoch()
             
             # Validate
-            val_loss, val_acc = self.validate()
+            val_loss, val_acc, class_correct, class_total = self.validate()
             
             # Learning rate schedule
-            if self.scheduler is not None:
-                self.scheduler.step()
-                current_lr = self.scheduler.get_last_lr()[0]
+            if self.warmup_epochs > 0 and epoch <= self.warmup_epochs:
+                current_lr = self.optimizer.param_groups[0]['lr']
             else:
-                current_lr = self.config['training']['learning_rate']
+                if self.scheduler is not None:
+                    self.scheduler.step()
+                    current_lr = self.scheduler.get_last_lr()[0]
+                else:
+                    current_lr = self.base_lr
             
             # Track metrics
             self.train_losses.append(train_loss)
@@ -258,6 +346,17 @@ class Trainer:
             print(f"  Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%")
             print(f"  Val Loss:   {val_loss:.4f} | Val Acc:   {val_acc:.2f}%")
             print(f"  LR: {current_lr:.6f}")
+
+            # Print per-class accuracy for visibility (uses config labels if available)
+            labels = self.config['data'].get('labels', [str(i) for i in range(len(class_total))])
+            try:
+                for i, (c_tot, c_cor) in enumerate(zip(class_total, class_correct)):
+                    if c_tot > 0:
+                        acc_i = 100.0 * c_cor / c_tot
+                        name = labels[i] if i < len(labels) else str(i)
+                        print(f"    - {name:<8}: {acc_i:5.2f}% ({c_cor}/{c_tot})")
+            except Exception:
+                pass
             
             # Save best model
             if val_acc > self.best_val_acc:

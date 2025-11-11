@@ -1,0 +1,57 @@
+BGT60TR13C Finger Classification Evaluation
+============================================================
+Model: models/best_model.pth
+Test data: data/val_data.npz
+Device: cpu
+Output: results
+
+Model loaded from epoch 32
+Best validation accuracy: 88.33%
+Loaded dataset: 600 samples
+  Data shape: (600, 128, 256)
+  Label shape: (600,)
+  Unique labels: [0 1 2 3 4]
+  Data statistics: mean=0.2476, std=0.6770, min=0.0000, max=242.5214
+
+============================================================
+Evaluating:   0%|          | 0/10 [00:00<?, ?it/s]Evaluating:  10%|█         | 1/10 [00:00<00:04,  1.99it/s]Evaluating:  20%|██        | 2/10 [00:00<00:03,  2.13it/s]Evaluating:  30%|███       | 3/10 [00:01<00:03,  2.18it/s]Evaluating:  40%|████      | 4/10 [00:01<00:02,  2.20it/s]Evaluating:  50%|█████     | 5/10 [00:02<00:02,  2.22it/s]Evaluating:  60%|██████    | 6/10 [00:02<00:01,  2.22it/s]Evaluating:  70%|███████   | 7/10 [00:03<00:01,  2.22it/s]Evaluating:  80%|████████  | 8/10 [00:03<00:00,  2.23it/s]Evaluating:  90%|█████████ | 9/10 [00:04<00:00,  2.23it/s]Evaluating: 100%|██████████| 10/10 [00:04<00:00,  2.74it/s]Evaluating: 100%|██████████| 10/10 [00:04<00:00,  2.34it/s]
+
+Test Accuracy: 89.83%
+
+============================================================
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       thumb       1.00      1.00      1.00       131
+       index       0.92      0.54      0.68       120
+      middle       1.00      1.00      1.00       124
+        ring       0.67      0.95      0.78       117
+       pinky       1.00      1.00      1.00       108
+
+    accuracy                           0.90       600
+   macro avg       0.92      0.90      0.89       600
+weighted avg       0.92      0.90      0.89       600
+
+
+Confusion Matrix:
+[[131   0   0   0   0]
+ [  0  65   0  55   0]
+ [  0   0 124   0   0]
+ [  0   6   0 111   0]
+ [  0   0   0   0 108]]
+Saved confusion matrix: results/confusion_matrix.png
+Saved per-class accuracy: results/per_class_accuracy.png
+Saved training history: results/training_history.png
+Saved confidence analysis: results/confidence_analysis.png
+
+Confidence Statistics:
+  Correct predictions: mean=0.834, std=0.206
+  Incorrect predictions: mean=0.523, std=0.017
+
+✓ Results saved to: results
+  - confusion_matrix.png
+  - per_class_accuracy.png
+  - training_history.png
+  - confidence_analysis.png
+  - evaluation_results.txt
