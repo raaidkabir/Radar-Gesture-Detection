@@ -1,7 +1,4 @@
 .github/
 /data/
-
-venv/
-env/
-ENV/
-.venv
+data/*.npy
+.venv/
